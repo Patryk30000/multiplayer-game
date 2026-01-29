@@ -1,15 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Multiplayer Game + Chat</title>
+    <title>Multiplayer Game</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { backgrond-color: blue; font-family: Arial; cursive; font-weight: 400; font-style: normal; display: flex; }
+        body { font-family: Arial; display: flex; }
+        canvas { border:1px solid black; }
         #chat { width: 300px; margin-left: 10px; }
         #messages { height: 500px; border: 1px solid #ccc; overflow-y: auto; padding: 5px; }
-        canvas { border:1px solid black; }
     </style>
 </head>
+
 <body>
 
 <canvas id="game" width="800" height="600"></canvas>
@@ -28,28 +29,104 @@ const socket = io();
 let myId = null;
 let players = {};
 
+// --- NEW: physics ---
+const GRAVITY = 0.6;
+const MOVE_SPEED = 4;
+const JUMP_FORCE = -12;
+const PLAYER_RADIUS = 10;
+const GROUND_Y = 580;
+
+let velocities = {}; // local physics only
+
+// --- Socket ---
 socket.on("init", data => {
     myId = data.id;
     players = data.players;
+    for (let id in players) {
+        velocities[id] = { vx:0, vy:0, onGround:false };
+    }
 });
 
 socket.on("update", data => {
     players = data;
-    draw();
+    for (let id in players) {
+        if (!velocities[id]) {
+            velocities[id] = { vx:0, vy:0, onGround:false };
+        }
+    }
 });
 
 socket.on("chat", data => addMessage(`<b>${data.name}:</b> ${data.message}`));
 socket.on("system", msg => addMessage(`<i>${msg}</i>`));
 
-document.addEventListener("keydown", e => {
-    let move = { dx:0, dy:0, id:myId };
-    if (e.key === "ArrowUp") move.dy = -5;
-    if (e.key === "ArrowDown") move.dy = 5;
-    if (e.key === "ArrowLeft") move.dx = -5;
-    if (e.key === "ArrowRight") move.dx = 5;
-    socket.emit("move", move);
-});
+// --- Input ---
+let keys = {};
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
 
+// --- Game loop ---
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+function update() {
+    if (!myId || !players[myId]) return;
+
+    let p = players[myId];
+    let v = velocities[myId];
+
+    // Left / right
+    if (keys["ArrowLeft"]) v.vx = -MOVE_SPEED;
+    else if (keys["ArrowRight"]) v.vx = MOVE_SPEED;
+    else v.vx = 0;
+
+    // Jump
+    if (keys["ArrowUp"] && v.onGround) {
+        v.vy = JUMP_FORCE;
+        v.onGround = false;
+    }
+
+    // Gravity
+    v.vy += GRAVITY;
+
+    // Apply movement
+    p.x += v.vx;
+    p.y += v.vy;
+
+    // Ground collision
+    if (p.y + PLAYER_RADIUS >= GROUND_Y) {
+        p.y = GROUND_Y - PLAYER_RADIUS;
+        v.vy = 0;
+        v.onGround = true;
+    }
+
+    // Send movement to server (unchanged API)
+    socket.emit("move", {
+        id: myId,
+        dx: v.vx,
+        dy: v.vy
+    });
+}
+
+function draw() {
+    ctx.fillStyle = "#808080";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Ground
+    ctx.fillStyle = "#333";
+    ctx.fillRect(0, GROUND_Y, 800, 20);
+
+    for (let id in players) {
+        ctx.beginPath();
+        ctx.arc(players[id].x, players[id].y, PLAYER_RADIUS, 0, Math.PI*2);
+        ctx.fillStyle = id === myId ? "red" : "blue";
+        ctx.fill();
+    }
+}
+
+// --- Chat ---
 document.getElementById("input").addEventListener("keydown", e => {
     if (e.key === "Enter") {
         const name = document.getElementById("name").value || "Player";
@@ -69,25 +146,9 @@ function addMessage(html) {
     messages.scrollTop = messages.scrollHeight;
 }
 
-function draw() {
-    // Gray background
-    ctx.fillStyle = "#808080"; // gray
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Draw players
-    for (let id in players) {
-        ctx.beginPath();
-        ctx.arc(players[id].x, players[id].y, 10, 0, Math.PI * 2);
-        ctx.fillStyle = id === myId ? "red" : "blue";
-        ctx.fill();
-    }
-}
+// Start
+loop();
 </script>
 
 </body>
 </html>
-
-
-
-
-
