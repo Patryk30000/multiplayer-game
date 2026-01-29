@@ -29,16 +29,20 @@ const socket = io();
 let myId = null;
 let players = {};
 
-// --- NEW: physics ---
+// ---- Physics (unchanged) ----
 const GRAVITY = 0.6;
 const MOVE_SPEED = 4;
 const JUMP_FORCE = -12;
 const PLAYER_RADIUS = 10;
 const GROUND_Y = 580;
 
-let velocities = {}; // local physics only
+let velocities = {};
 
-// --- Socket ---
+// ---- Input ----
+let keys = {};
+let jumpPressed = false;
+
+// ---- Socket ----
 socket.on("init", data => {
     myId = data.id;
     players = data.players;
@@ -59,12 +63,19 @@ socket.on("update", data => {
 socket.on("chat", data => addMessage(`<b>${data.name}:</b> ${data.message}`));
 socket.on("system", msg => addMessage(`<i>${msg}</i>`));
 
-// --- Input ---
-let keys = {};
-document.addEventListener("keydown", e => keys[e.key] = true);
-document.addEventListener("keyup", e => keys[e.key] = false);
+// ---- Key handling (FIXED) ----
+document.addEventListener("keydown", e => {
+    if (!keys[e.key] && e.key === "ArrowUp") {
+        jumpPressed = true;   // edge-triggered jump
+    }
+    keys[e.key] = true;
+});
 
-// --- Game loop ---
+document.addEventListener("keyup", e => {
+    keys[e.key] = false;
+});
+
+// ---- Game loop ----
 function loop() {
     update();
     draw();
@@ -77,13 +88,13 @@ function update() {
     let p = players[myId];
     let v = velocities[myId];
 
-    // Left / right
+    // Horizontal movement
     if (keys["ArrowLeft"]) v.vx = -MOVE_SPEED;
     else if (keys["ArrowRight"]) v.vx = MOVE_SPEED;
     else v.vx = 0;
 
-    // Jump
-    if (keys["ArrowUp"] && v.onGround) {
+    // Jump (FIXED)
+    if (jumpPressed && v.onGround) {
         v.vy = JUMP_FORCE;
         v.onGround = false;
     }
@@ -102,7 +113,10 @@ function update() {
         v.onGround = true;
     }
 
-    // Send movement to server (unchanged API)
+    // Reset jump press after processing
+    jumpPressed = false;
+
+    // Send movement (unchanged)
     socket.emit("move", {
         id: myId,
         dx: v.vx,
@@ -111,6 +125,7 @@ function update() {
 }
 
 function draw() {
+    // Gray background
     ctx.fillStyle = "#808080";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -118,15 +133,16 @@ function draw() {
     ctx.fillStyle = "#333";
     ctx.fillRect(0, GROUND_Y, 800, 20);
 
+    // Players
     for (let id in players) {
         ctx.beginPath();
-        ctx.arc(players[id].x, players[id].y, PLAYER_RADIUS, 0, Math.PI*2);
+        ctx.arc(players[id].x, players[id].y, PLAYER_RADIUS, 0, Math.PI * 2);
         ctx.fillStyle = id === myId ? "red" : "blue";
         ctx.fill();
     }
 }
 
-// --- Chat ---
+// ---- Chat ----
 document.getElementById("input").addEventListener("keydown", e => {
     if (e.key === "Enter") {
         const name = document.getElementById("name").value || "Player";
