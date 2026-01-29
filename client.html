@@ -70,11 +70,15 @@ function addMessage(html) {
 }
 
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Gray background
+    ctx.fillStyle = "#808080"; // gray
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw players
     for (let id in players) {
         ctx.beginPath();
-        ctx.arc(players[id].x, players[id].y, 10, 0, Math.PI*2);
-        ctx.fillStyle = id===myId ? "red" : "blue";
+        ctx.arc(players[id].x, players[id].y, 10, 0, Math.PI * 2);
+        ctx.fillStyle = id === myId ? "red" : "blue";
         ctx.fill();
     }
 }
@@ -82,4 +86,5 @@ function draw() {
 
 </body>
 </html>
+
 
